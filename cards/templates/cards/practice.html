@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Изучение слов</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; text-align: center; }
+        .card { border: 1px solid #ccc; border-radius: 10px; padding: 20px; margin-bottom: 20px; background-color: #f9f9f9; }
+        .word { font-size: 48px; margin: 20px 0; }
+        .image { max-width: 100%; max-height: 200px; margin: 20px 0; }
+        .options { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+        .option-btn { padding: 10px 20px; font-size: 18px; border: none; border-radius: 5px; background-color: #007bff; color: white; cursor: pointer; }
+        .option-btn:hover { background-color: #0056b3; }
+        .option-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        #result { margin-top: 20px; font-size: 18px; }
+        .next-btn { margin-top: 20px; padding: 10px 30px; font-size: 18px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; display: none; }
+    </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <h1>Изучение иностранных слов</h1>
+    {% if no_cards %}
+        <p>Нет карточек. Добавьте их в админке.</p>
+    {% else %}
+        <div class="card">
+            <div class="word">{{ card.word }}</div>
+            {% if card.image %}
+                <img src="{{ card.image.url }}" class="image">
+            {% endif %}
+        </div>
+
+        <div class="options">
+            {% for option in options %}
+                <button class="option-btn" data-value="{{ option }}">{{ option }}</button>
+            {% endfor %}
+        </div>
+
+        <div id="result"></div>
+        <button class="next-btn" onclick="nextCard()">Следующая карточка</button>
+    {% endif %}
+
+    <script>
+        $(document).ready(function() {
+            $('.option-btn').click(function() {
+                var selected = $(this).data('value');
+                var cardId = {{ card.id }};
+
+                $('.option-btn').prop('disabled', true);
+
+                $.ajax({
+                    url: '{% url "check_answer" %}',
+                    method: 'POST',
+                    data: {
+                        card_id: cardId,
+                        selected: selected,
+                        csrfmiddlewaretoken: '{{ csrf_token }}'
+                    },
+                    success: function(response) {
+                        $('#result').html(response.message);
+                        $('#result').css('color', response.correct ? 'green' : 'red');
+                        $('.next-btn').show();
+                    },
+                    error: function() {
+                        $('#result').html('Ошибка при проверке ответа');
+                    }
+                });
+            });
+        });
+
+        function nextCard() {
+            window.location.reload();
+        }
+    </script>
+</body>
+</html>
