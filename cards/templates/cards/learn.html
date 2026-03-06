@@ -3,7 +3,6 @@
 <head>
     <title>Заучивание слов</title>
     <style>
-        
         body {
             font-family: Arial, sans-serif;
             max-width: 600px;
@@ -14,29 +13,61 @@
         h1 {
             color: #333;
         }
-        .interval-control {
+        .interval-control, .progress-section, .action-buttons {
             margin: 20px auto;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 10px;
         }
-        .interval-btn {
+        .interval-btn, .shuffle-btn, .next-btn {
             padding: 5px 15px;
-            font-size: 20px;
-            background-color: #6c757d;
-            color: white;
+            font-size: 18px;
             border: none;
             border-radius: 5px;
             cursor: pointer;
+            color: white;
+        }
+        .interval-btn {
+            background-color: #6c757d;
         }
         .interval-btn:hover {
             background-color: #5a6268;
+        }
+        .shuffle-btn {
+            background-color: #ffc107;
+            color: black;
+        }
+        .shuffle-btn:hover {
+            background-color: #e0a800;
+        }
+        .next-btn {
+            background-color: #007bff;
+        }
+        .next-btn:hover {
+            background-color: #0056b3;
         }
         .interval-value {
             font-size: 18px;
             min-width: 50px;
             text-align: center;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #28a745;
+            transition: width 0.3s;
+        }
+        .progress-text {
+            font-size: 16px;
+            color: #666;
         }
         .flashcard-container {
             perspective: 1000px;
@@ -101,38 +132,6 @@
             margin-top: 10px;
             border-radius: 5px;
         }
-        .next-btn {
-            margin-top: 30px;
-            padding: 10px 30px;
-            font-size: 18px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        .next-btn:hover {
-            background-color: #0056b3;
-        }
-
-        .progress-container {
-            width: 400px;
-            margin: 20px auto;
-            background-color: #e0e0e0;
-            border-radius: 5px;
-            overflow: hidden;
-        }
-        .progress-bar {
-            height: 20px;
-            background-color: #28a745;
-            width: 0%;
-            transition: width 0.3s;
-        }
-        .progress-text {
-            margin-top: 5px;
-            font-size: 14px;
-            color: #666;
-        }
     </style>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
@@ -146,10 +145,14 @@
         <button class="interval-btn" id="incrementInterval">+</button>
     </div>
 
-    <div class="progress-container">
-        <div class="progress-bar" id="progressBar" style="width: 0%;"></div>
+    <div class="progress-section">
+        <div style="width: 100%;">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
+            </div>
+            <div class="progress-text" id="progressText">Просмотрено 0 из 0</div>
+        </div>
     </div>
-    <div class="progress-text" id="progressText">0 из 0</div>
 
     <div class="flashcard-container">
         <div class="flashcard" id="flashcard">
@@ -163,15 +166,23 @@
         </div>
     </div>
     
-    <button class="next-btn" id="nextBtn">Следующее слово</button>
+    <div class="action-buttons">
+        <button class="shuffle-btn" id="shuffleBtn">Перемешать заново</button>
+        <button class="next-btn" id="nextBtn">Следующее слово</button>
+    </div>
 
     <script>
+        const STORAGE_KEY = 'flashcards_learn_progress';
+
         let currentCard = null;
         let flipTimer = null;
         let currentInterval = 3;
-        let cardIds = [];          // массив ID карточек в случайном порядке
-        let currentIndex = 0;       // индекс текущей карточки в массиве
-        let totalCards = 0;
+
+        // Структура прогресса: { cardIds: [...], currentIndex: 0 }
+        let progress = {
+            cardIds: [],
+            currentIndex: 0
+        };
 
         const flashcard = document.getElementById('flashcard');
         const wordEl = document.getElementById('word');
@@ -181,22 +192,96 @@
         const decrementBtn = document.getElementById('decrementInterval');
         const incrementBtn = document.getElementById('incrementInterval');
         const nextBtn = document.getElementById('nextBtn');
-        const progressBar = document.getElementById('progressBar');
+        const shuffleBtn = document.getElementById('shuffleBtn');
+        const progressFill = document.getElementById('progressFill');
         const progressText = document.getElementById('progressText');
 
-        function updateProgress() {
-            // Оставшиеся карточки: totalCards - currentIndex - 1? 
-            // currentIndex - это индекс текущей карточки (0-based). Уже показаны currentIndex карточек.
-            // Осталось показать: totalCards - currentIndex - 1? Если currentIndex = 0, показана 1 карточка, осталось totalCards-1.
-            // Прогресс: (currentIndex) / totalCards (доля пройденных) или (totalCards - currentIndex - 1) / totalCards (доля оставшихся).
-            // Сделаем показ пройденных (сколько уже посмотрели).
-            let viewed = currentIndex + 1; // текущая карточка тоже считается просмотренной
-            let percent = (viewed / totalCards) * 100;
-            progressBar.style.width = percent + '%';
-            progressText.innerText = `Просмотрено ${viewed} из ${totalCards}`;
+        // Загружаем сохранённый прогресс из localStorage
+        function loadProgress() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    if (parsed.cardIds && Array.isArray(parsed.cardIds) && parsed.currentIndex !== undefined) {
+                        progress = parsed;
+                        return true;
+                    }
+                } catch (e) {
+                    console.warn('Не удалось загрузить сохранённый прогресс', e);
+                }
+            }
+            return false;
         }
 
-        function loadCard(cardId) {
+        // Сохраняем прогресс в localStorage
+        function saveProgress() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+        }
+
+        // Очищаем прогресс (при перемешивании)
+        function resetProgress(newCardIds) {
+            progress.cardIds = newCardIds;
+            progress.currentIndex = 0;
+            saveProgress();
+        }
+
+        // Обновляем прогресс после показа карточки (увеличиваем индекс, если он не последний)
+        // Возвращает true, если карточка была показана и индекс увеличился
+        function advanceProgress() {
+            if (progress.currentIndex < progress.cardIds.length - 1) {
+                progress.currentIndex++;
+                saveProgress();
+                return true;
+            }
+            // Если дошли до конца, остаёмся на последней, но не увеличиваем дальше
+            return false;
+        }
+
+        // Обновляем отображение прогресс-бара
+        function updateProgressBar() {
+            const total = progress.cardIds.length;
+            const current = progress.currentIndex;
+            const percent = total > 0 ? (current / total) * 100 : 0;
+            progressFill.style.width = percent + '%';
+            progressText.textContent = `Просмотрено ${current} из ${total}`;
+        }
+
+        // Загружаем список ID карточек с сервера и инициализируем прогресс
+        function fetchCardIds() {
+            $.ajax({
+                url: '{% url "get_group1_cards" %}',
+                method: 'GET',
+                success: function(data) {
+                    if (!data.card_ids || data.card_ids.length === 0) {
+                        wordEl.textContent = 'В группе 1 нет карточек';
+                        return;
+                    }
+                    const newIds = data.card_ids;
+                    
+                    // Если нет сохранённого прогресса или сохранённый список не совпадает по длине, используем новый
+                    if (!loadProgress() || progress.cardIds.length !== newIds.length) {
+                        resetProgress(newIds);
+                    }
+                    
+                    // Проверяем, что текущий индекс не выходит за пределы
+                    if (progress.currentIndex >= progress.cardIds.length) {
+                        progress.currentIndex = progress.cardIds.length - 1;
+                        saveProgress();
+                    }
+                    
+                    updateProgressBar();
+                    loadCardById(progress.cardIds[progress.currentIndex]);
+                },
+                error: function() {
+                    wordEl.textContent = 'Ошибка загрузки списка карточек';
+                }
+            });
+        }
+
+        // Загружаем карточку по её ID
+        function loadCardById(cardId) {
+            if (!cardId) return;
+            
             if (flipTimer) {
                 clearTimeout(flipTimer);
                 flipTimer = null;
@@ -246,40 +331,26 @@
             });
         }
 
-        function loadNextCard() {
-            if (totalCards === 0) return;
-            // Переходим к следующей карточке
-            currentIndex++;
-            if (currentIndex >= totalCards) {
-                // Закончили круг, можно начать заново
-                currentIndex = 0;
+        // Переход к следующей карточке
+        function goToNextCard() {
+            if (progress.cardIds.length === 0) return;
+
+            // Если не последняя карточка, увеличиваем индекс
+            if (progress.currentIndex < progress.cardIds.length - 1) {
+                advanceProgress();
+            } else {
+                // Если последняя, остаёмся на ней, но можно по желанию вернуться к началу
+                // В данном случае остаёмся на последней
+                // Но для удобства можно зациклить, если нужно:
+                // progress.currentIndex = 0;
+                // saveProgress();
             }
-            loadCard(cardIds[currentIndex]);
-            updateProgress();
+            
+            updateProgressBar();
+            loadCardById(progress.cardIds[progress.currentIndex]);
         }
 
-        function init() {
-            // Получаем список ID карточек
-            $.ajax({
-                url: '{% url "get_group1_cards" %}',
-                method: 'GET',
-                success: function(data) {
-                    if (data.error) {
-                        wordEl.textContent = data.error;
-                        return;
-                    }
-                    cardIds = data.card_ids;
-                    totalCards = data.total;
-                    currentIndex = 0;
-                    loadCard(cardIds[currentIndex]);
-                    updateProgress();
-                },
-                error: function() {
-                    wordEl.textContent = 'Ошибка загрузки списка карточек';
-                }
-            });
-        }
-
+        // Обработчики интервала
         decrementBtn.addEventListener('click', function() {
             if (currentInterval > 1) {
                 currentInterval--;
@@ -294,11 +365,33 @@
             }
         });
 
+        // Следующая карточка
         nextBtn.addEventListener('click', function() {
-            loadNextCard();
+            goToNextCard();
         });
 
-        init();
+        // Перемешать заново
+        shuffleBtn.addEventListener('click', function() {
+            $.ajax({
+                url: '{% url "get_group1_cards" %}',
+                method: 'GET',
+                success: function(data) {
+                    if (!data.card_ids || data.card_ids.length === 0) {
+                        wordEl.textContent = 'В группе 1 нет карточек';
+                        return;
+                    }
+                    resetProgress(data.card_ids);
+                    updateProgressBar();
+                    loadCardById(progress.cardIds[progress.currentIndex]);
+                },
+                error: function() {
+                    wordEl.textContent = 'Ошибка перемешивания';
+                }
+            });
+        });
+
+        // Инициализация
+        fetchCardIds();
     </script>
 </body>
 </html>
