@@ -7,6 +7,7 @@ from cards import views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', views.practice, name='practice'),
+    path('learn/', views.learn, name='learn'),  # новая страница заучивания
     path('check/', views.check_answer, name='check_answer'),
 ]
 

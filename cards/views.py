@@ -63,6 +63,9 @@ def practice(request):
 
 
 def check_answer(request):
+    
+    
+
     if request.method == 'POST':
         card_id = request.POST.get('card_id')
         selected = request.POST.get('selected')
@@ -86,3 +89,18 @@ def check_answer(request):
             'message': 'Правильно!' if is_correct else f'Неправильно. Правильный перевод: {correct_translation}'
         })
     return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+
+def learn(request):
+    # Получаем все карточки из группы 1
+    cards_group1 = Card.objects.filter(group=1)
+    if not cards_group1.exists():
+        return render(request, 'cards/learn.html', {'no_cards': True})
+    
+    # Выбираем случайную карточку
+    card = random.choice(cards_group1)
+    
+    context = {
+        'card': card,
+    }
+    return render(request, 'cards/learn.html', context)
