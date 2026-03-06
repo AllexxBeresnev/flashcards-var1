@@ -1,6 +1,7 @@
 import random
-from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
+from django.shortcuts import render
+from django.core import serializers
 from .models import Card
 
 def practice(request):
@@ -92,15 +93,35 @@ def check_answer(request):
 
 
 def learn(request):
-    # Получаем все карточки из группы 1
-    cards_group1 = Card.objects.filter(group=1)
-    if not cards_group1.exists():
-        return render(request, 'cards/learn.html', {'no_cards': True})
-    
-    # Выбираем случайную карточку
-    card = random.choice(cards_group1)
-    
-    context = {
-        'card': card,
+    # Просто рендерим страницу, карточка будет загружена через AJAX
+    return render(request, 'cards/learn.html')
+
+def next_learn_card(request):
+    card_id = request.GET.get('card_id')
+    if not card_id:
+        return JsonResponse({'error': 'No card_id provided'}, status=400)
+    try:
+        card = Card.objects.get(id=card_id, group=1)
+    except Card.DoesNotExist:
+        return JsonResponse({'error': 'Card not found or not in group 1'}, status=404)
+    data = {
+        'id': card.id,
+        'word': card.word,
+        'translation1': card.translation1,
+        'translation2': card.translation2,
+        'translation3': card.translation3,
+        'image_url': card.image.url if card.image else None,
     }
-    return render(request, 'cards/learn.html', context)
+    return JsonResponse(data)
+
+
+def get_group1_cards(request):
+    cards = Card.objects.filter(group=1).values_list('id', flat=True)
+    if not cards:
+        return JsonResponse({'error': 'Нет карточек в группе 1'}, status=404)
+    card_ids = list(cards)
+    random.shuffle(card_ids)  # перемешиваем на сервере
+    return JsonResponse({
+        'card_ids': card_ids,
+        'total': len(card_ids)
+    })

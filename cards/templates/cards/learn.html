@@ -3,6 +3,7 @@
 <head>
     <title>Заучивание слов</title>
     <style>
+        
         body {
             font-family: Arial, sans-serif;
             max-width: 600px;
@@ -12,6 +13,30 @@
         }
         h1 {
             color: #333;
+        }
+        .interval-control {
+            margin: 20px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .interval-btn {
+            padding: 5px 15px;
+            font-size: 20px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .interval-btn:hover {
+            background-color: #5a6268;
+        }
+        .interval-value {
+            font-size: 18px;
+            min-width: 50px;
+            text-align: center;
         }
         .flashcard-container {
             perspective: 1000px;
@@ -89,55 +114,191 @@
         .next-btn:hover {
             background-color: #0056b3;
         }
-        .message {
-            font-size: 18px;
+
+        .progress-container {
+            width: 400px;
+            margin: 20px auto;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 20px;
+            background-color: #28a745;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .progress-text {
+            margin-top: 5px;
+            font-size: 14px;
             color: #666;
         }
     </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
     <h1>Заучивание слов (группа 1)</h1>
     
-    {% if no_cards %}
-        <p class="message">В группе 1 пока нет карточек. Добавьте их в админке.</p>
-        <a href="/admin/cards/card/" class="next-btn">Перейти к админке</a>
-    {% else %}
-        <div class="flashcard-container">
-            <div class="flashcard" id="flashcard">
-                <div class="front">
-                    <div class="word">{{ card.word }}</div>
-                    {% if card.image %}
-                        <img src="{{ card.image.url }}" class="image">
-                    {% endif %}
-                </div>
-                <div class="back">
-                    {% if card.translation2 or card.translation3 %}
-                        <ul class="translations-list">
-                            <li>{{ card.translation1 }}</li>
-                            {% if card.translation2 %}<li>{{ card.translation2 }}</li>{% endif %}
-                            {% if card.translation3 %}<li>{{ card.translation3 }}</li>{% endif %}
-                        </ul>
-                    {% else %}
-                        <div class="translation">{{ card.translation1 }}</div>
-                    {% endif %}
-                </div>
+    <div class="interval-control">
+        <button class="interval-btn" id="decrementInterval">-</button>
+        <span class="interval-value" id="intervalValue">3</span>
+        <span>сек</span>
+        <button class="interval-btn" id="incrementInterval">+</button>
+    </div>
+
+    <div class="progress-container">
+        <div class="progress-bar" id="progressBar" style="width: 0%;"></div>
+    </div>
+    <div class="progress-text" id="progressText">0 из 0</div>
+
+    <div class="flashcard-container">
+        <div class="flashcard" id="flashcard">
+            <div class="front">
+                <div class="word" id="word">Загрузка...</div>
+                <img id="image" class="image" style="display: none;">
+            </div>
+            <div class="back">
+                <div id="translationDisplay"></div>
             </div>
         </div>
-        
-        <button class="next-btn" onclick="nextCard()">Следующее слово</button>
-    {% endif %}
-
-    <a href="{% url 'learn' %}" style="display: inline-block; margin-bottom: 20px; padding: 10px 20px; background-color: #17a2b8; color: white; text-decoration: none; border-radius: 5px;">Перейти к заучиванию (группа 1)</a>
+    </div>
     
-    <script>
-        // Переворачиваем карточку через 3 секунды
-        setTimeout(function() {
-            document.getElementById('flashcard').classList.add('flipped');
-        }, 3000);
+    <button class="next-btn" id="nextBtn">Следующее слово</button>
 
-        function nextCard() {
-            window.location.reload();
+    <script>
+        let currentCard = null;
+        let flipTimer = null;
+        let currentInterval = 3;
+        let cardIds = [];          // массив ID карточек в случайном порядке
+        let currentIndex = 0;       // индекс текущей карточки в массиве
+        let totalCards = 0;
+
+        const flashcard = document.getElementById('flashcard');
+        const wordEl = document.getElementById('word');
+        const imageEl = document.getElementById('image');
+        const translationDisplay = document.getElementById('translationDisplay');
+        const intervalSpan = document.getElementById('intervalValue');
+        const decrementBtn = document.getElementById('decrementInterval');
+        const incrementBtn = document.getElementById('incrementInterval');
+        const nextBtn = document.getElementById('nextBtn');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+
+        function updateProgress() {
+            // Оставшиеся карточки: totalCards - currentIndex - 1? 
+            // currentIndex - это индекс текущей карточки (0-based). Уже показаны currentIndex карточек.
+            // Осталось показать: totalCards - currentIndex - 1? Если currentIndex = 0, показана 1 карточка, осталось totalCards-1.
+            // Прогресс: (currentIndex) / totalCards (доля пройденных) или (totalCards - currentIndex - 1) / totalCards (доля оставшихся).
+            // Сделаем показ пройденных (сколько уже посмотрели).
+            let viewed = currentIndex + 1; // текущая карточка тоже считается просмотренной
+            let percent = (viewed / totalCards) * 100;
+            progressBar.style.width = percent + '%';
+            progressText.innerText = `Просмотрено ${viewed} из ${totalCards}`;
         }
+
+        function loadCard(cardId) {
+            if (flipTimer) {
+                clearTimeout(flipTimer);
+                flipTimer = null;
+            }
+            flashcard.classList.remove('flipped');
+
+            $.ajax({
+                url: '{% url "next_learn_card" %}',
+                method: 'GET',
+                data: { card_id: cardId },
+                success: function(data) {
+                    if (data.error) {
+                        wordEl.textContent = data.error;
+                        translationDisplay.innerHTML = '';
+                        imageEl.style.display = 'none';
+                        return;
+                    }
+                    currentCard = data;
+                    wordEl.textContent = data.word;
+                    
+                    if (data.image_url) {
+                        imageEl.src = data.image_url;
+                        imageEl.style.display = 'block';
+                    } else {
+                        imageEl.style.display = 'none';
+                    }
+
+                    let translationsHtml = '';
+                    if (data.translation2 || data.translation3) {
+                        translationsHtml = '<ul class="translations-list">';
+                        translationsHtml += '<li>' + data.translation1 + '</li>';
+                        if (data.translation2) translationsHtml += '<li>' + data.translation2 + '</li>';
+                        if (data.translation3) translationsHtml += '<li>' + data.translation3 + '</li>';
+                        translationsHtml += '</ul>';
+                    } else {
+                        translationsHtml = '<div class="translation">' + data.translation1 + '</div>';
+                    }
+                    translationDisplay.innerHTML = translationsHtml;
+
+                    flipTimer = setTimeout(function() {
+                        flashcard.classList.add('flipped');
+                    }, currentInterval * 1000);
+                },
+                error: function() {
+                    wordEl.textContent = 'Ошибка загрузки карточки';
+                }
+            });
+        }
+
+        function loadNextCard() {
+            if (totalCards === 0) return;
+            // Переходим к следующей карточке
+            currentIndex++;
+            if (currentIndex >= totalCards) {
+                // Закончили круг, можно начать заново
+                currentIndex = 0;
+            }
+            loadCard(cardIds[currentIndex]);
+            updateProgress();
+        }
+
+        function init() {
+            // Получаем список ID карточек
+            $.ajax({
+                url: '{% url "get_group1_cards" %}',
+                method: 'GET',
+                success: function(data) {
+                    if (data.error) {
+                        wordEl.textContent = data.error;
+                        return;
+                    }
+                    cardIds = data.card_ids;
+                    totalCards = data.total;
+                    currentIndex = 0;
+                    loadCard(cardIds[currentIndex]);
+                    updateProgress();
+                },
+                error: function() {
+                    wordEl.textContent = 'Ошибка загрузки списка карточек';
+                }
+            });
+        }
+
+        decrementBtn.addEventListener('click', function() {
+            if (currentInterval > 1) {
+                currentInterval--;
+                intervalSpan.textContent = currentInterval;
+            }
+        });
+
+        incrementBtn.addEventListener('click', function() {
+            if (currentInterval < 10) {
+                currentInterval++;
+                intervalSpan.textContent = currentInterval;
+            }
+        });
+
+        nextBtn.addEventListener('click', function() {
+            loadNextCard();
+        });
+
+        init();
     </script>
 </body>
 </html>
