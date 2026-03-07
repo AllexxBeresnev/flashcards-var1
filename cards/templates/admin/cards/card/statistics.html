@@ -1,0 +1,32 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div id="content-main">
+    <h1>Статистика карточек</h1>
+    <div style="margin-bottom: 20px;">
+        <a href="../" class="button">Вернуться к списку карточек</a>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Группа</th>
+                <th>Количество</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for stat in stats %}
+            <tr>
+                <td>Группа {{ stat.group }}</td>
+                <td>{{ stat.count }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="2">Нет карточек</td></tr>
+            {% endfor %}
+            <tr style="font-weight: bold;">
+                <td>Всего</td>
+                <td>{{ total }}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -3,7 +3,6 @@
 <head>
     <title>Заучивание слов</title>
     <style>
-        /* стили остаются без изменений (см. предыдущий ответ) */
         body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; text-align: center; background-color: #f5f5f5; }
         h1 { color: #333; }
         .interval-control { margin: 20px auto; display: flex; align-items: center; justify-content: center; gap: 10px; }
@@ -13,7 +12,7 @@
         .progress-container { width: 400px; margin: 20px auto; background-color: #e0e0e0; border-radius: 5px; overflow: hidden; }
         .progress-bar { height: 20px; background-color: #007bff; width: 0%; transition: width 0.3s; }
         .progress-text { margin-top: 5px; font-size: 14px; color: #666; }
-        .flashcard-container { perspective: 1000px; margin: 40px auto; width: 400px; height: 300px; }
+        .flashcard-container { perspective: 1000px; margin: 40px auto; width: 400px; height: 300px; position: relative; }
         .flashcard { width: 100%; height: 100%; position: relative; transition: transform 0.6s; transform-style: preserve-3d; cursor: pointer; }
         .flashcard.flipped { transform: rotateY(180deg); }
         .front, .back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; background-color: white; }
@@ -24,11 +23,55 @@
         .translations-list { font-size: 24px; list-style: none; padding: 0; }
         .translations-list li { margin: 5px 0; }
         .image { max-width: 100%; max-height: 150px; margin-top: 10px; border-radius: 5px; }
+        .speaker-btn {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(255,255,255,0.3);
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            color: white;
+            transition: background 0.2s;
+        }
+        .speaker-btn:hover {
+            background: rgba(255,255,255,0.5);
+        }
         .next-btn { margin: 10px; padding: 10px 30px; font-size: 18px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
         .next-btn:hover { background-color: #0056b3; }
         .shuffle-btn { margin: 10px; padding: 10px 30px; font-size: 18px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
         .shuffle-btn:hover { background-color: #218838; }
         .message { font-size: 18px; color: #666; margin: 20px; }
+        .nav-link {
+            display: inline-block;
+            margin-top: 30px;
+            padding: 10px 20px;
+            background-color: #6c757d;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .nav-link:hover { background-color: #5a6268; }
+        .voice-selector-container {
+    background: white;
+    padding: 15px;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+#voiceSelect {
+    font-size: 14px;
+    cursor: pointer;
+}
+#voiceSelect option {
+    padding: 5px;
+}
     </style>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
@@ -54,6 +97,7 @@
             <div class="front">
                 <div class="word" id="word">Загрузка...</div>
                 <img id="image" class="image" style="display: none;">
+                <button class="speaker-btn" id="speakerBtn">🔊</button>
             </div>
             <div class="back">
                 <div id="translationDisplay"></div>
@@ -62,15 +106,191 @@
     </div>
     
     <div>
-        <button class="shuffle-btn" id="shuffleBtn">Перемешать заново</button>
         <button class="next-btn" id="nextBtn">Следующее слово</button>
+        <button class="shuffle-btn" id="shuffleBtn">Перемешать заново</button>
     </div>
 
+<!-- Добавить после блока interval-control, перед progressBlock -->
+{% comment %} <div class="voice-selector-container" style="margin: 20px auto; max-width: 400px; text-align: left;">
+    <label for="voiceSelect" style="display: block; margin-bottom: 5px; font-weight: bold;">Голос озвучки:</label>
+    <select id="voiceSelect" style="width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+        <option value="">Загрузка голосов...</option>
+    </select>
+    <div id="voiceStatus" style="font-size: 12px; color: #666; margin-top: 5px;"></div>
+</div>
+
+<script>
+    // Добавить новые переменные в начало скрипта
+    let availableVoices = [];
+    let selectedVoiceURI = null;
+    let lastSpokenWord = ''; // для кеширования utterance
+
+    // Функция загрузки доступных голосов
+    function loadVoices() {
+        return new Promise((resolve) => {
+            let voices = window.speechSynthesis.getVoices();
+            if (voices.length > 0) {
+                resolve(voices);
+            } else {
+                window.speechSynthesis.onvoiceschanged = () => {
+                    resolve(window.speechSynthesis.getVoices());
+                };
+            }
+        });
+    }
+
+    // Функция для фильтрации испанских голосов и их сортировки по качеству
+    function getSpanishVoices(voices) {
+        return voices
+            .filter(voice => voice.lang.startsWith('es')) // все испанские (es-ES, es-MX, es-AR и т.д.)
+            .sort((a, b) => {
+                // Приоритет 1: голоса с пометкой default
+                if (a.default && !b.default) return -1;
+                if (!a.default && b.default) return 1;
+                
+                // Приоритет 2: пытаемся определить качество по названию
+                const aIsHighQuality = a.name.includes('Premium') || a.name.includes('Natural') || a.name.includes('Enhanced');
+                const bIsHighQuality = b.name.includes('Premium') || b.name.includes('Natural') || b.name.includes('Enhanced');
+                
+                if (aIsHighQuality && !bIsHighQuality) return -1;
+                if (!aIsHighQuality && bIsHighQuality) return 1;
+                
+                // Приоритет 3: алфавитный порядок для одинакового качества
+                return a.name.localeCompare(b.name);
+            });
+    }
+
+    // Функция для заполнения селектора голосов
+    async function populateVoiceSelector() {
+        const allVoices = await loadVoices();
+        const spanishVoices = getSpanishVoices(allVoices);
+        
+        const select = document.getElementById('voiceSelect');
+        const statusDiv = document.getElementById('voiceStatus');
+        
+        if (spanishVoices.length === 0) {
+            select.innerHTML = '<option value="">Испанские голоса не найдены</option>';
+            statusDiv.textContent = '⚠️ Используется голос по умолчанию';
+            return;
+        }
+        
+        let options = '';
+        let savedVoiceURI = localStorage.getItem('selectedVoiceURI');
+        
+        spanishVoices.forEach(voice => {
+            const isDefault = voice.default ? ' (по умолчанию)' : '';
+            const quality = voice.name.includes('Premium') || voice.name.includes('Natural') ? '⭐ ' : '';
+            const selected = (savedVoiceURI === voice.voiceURI) ? 'selected' : '';
+            options += `<option value="${voice.voiceURI}" ${selected} data-name="${voice.name}">${quality}${voice.name} — ${voice.lang}${isDefault}</option>`;
+        });
+        
+        select.innerHTML = options;
+        availableVoices = spanishVoices;
+        
+        // Если сохранённый голос не найден, выбираем первый или дефолтный
+        if (!savedVoiceURI || !spanishVoices.some(v => v.voiceURI === savedVoiceURI)) {
+            const defaultVoice = spanishVoices.find(v => v.default) || spanishVoices[0];
+            if (defaultVoice) {
+                select.value = defaultVoice.voiceURI;
+                selectedVoiceURI = defaultVoice.voiceURI;
+                localStorage.setItem('selectedVoiceURI', defaultVoice.voiceURI);
+            }
+        } else {
+            selectedVoiceURI = savedVoiceURI;
+        }
+        
+        statusDiv.textContent = `✅ Доступно испанских голосов: ${spanishVoices.length}`;
+    }
+
+    // Обновлённая функция speak с выбором голоса
+    function speak(text) {
+        if (!soundEnabled) return;
+        if (!window.speechSynthesis) {
+            console.warn("Speech synthesis not supported");
+            return;
+        }
+        
+        // Прерываем предыдущее произношение
+        window.speechSynthesis.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'es-ES'; // базовый язык
+        
+        // Если есть выбранный голос, используем его
+        if (selectedVoiceURI && availableVoices.length > 0) {
+            const selectedVoice = availableVoices.find(v => v.voiceURI === selectedVoiceURI);
+            if (selectedVoice) {
+                utterance.voice = selectedVoice;
+                utterance.lang = selectedVoice.lang; // используем язык выбранного голоса
+            }
+        }
+        
+        utterance.rate = 0.9;
+        
+        // Кешируем utterance для повторяющихся слов (необязательно)
+        if (lastSpokenWord === text) {
+            // Можно использовать закешированный, но для простоты просто говорим
+        }
+        lastSpokenWord = text;
+        
+        window.speechSynthesis.speak(utterance);
+    }
+
+    // Обработчик изменения выбранного голоса
+    document.getElementById('voiceSelect').addEventListener('change', function(e) {
+        selectedVoiceURI = e.target.value;
+        if (selectedVoiceURI) {
+            localStorage.setItem('selectedVoiceURI', selectedVoiceURI);
+            // Если текущая карточка загружена, можно переозвучить слово новым голосом
+            if (currentCard) {
+                speak(currentCard.word);
+            }
+        }
+    });
+
+    // В функцию loadNextCard, после успешной загрузки данных, добавить вызов speak
+    // Уже есть: speak(data.word);
     
-    <!-- Новая ссылка -->
-    <div style="margin-top: 30px;">
-        <a href="{% url 'practice' %}" style="display: inline-block; padding: 10px 20px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px;">Перейти к тренировке (практика)</a>
-    </div>
+    // В функцию fetchCardIds, после успешной загрузки, добавить:
+    success: function(data) {
+        // ... существующий код ...
+        
+        // Загружаем голоса, если ещё не загружены
+        if (availableVoices.length === 0) {
+            populateVoiceSelector();
+        }
+        
+        // ... остальной код ...
+    }
+
+    // В функцию loadSettings добавить загрузку выбранного голоса
+    function loadSettings() {
+        const savedSound = localStorage.getItem('soundEnabled');
+        if (savedSound !== null) {
+            soundEnabled = savedSound === 'true';
+        }
+        speakerBtn.textContent = soundEnabled ? '🔊' : '🔇';
+        
+        const savedVoice = localStorage.getItem('selectedVoiceURI');
+        if (savedVoice) {
+            selectedVoiceURI = savedVoice;
+        }
+        
+        const saved = localStorage.getItem('learnProgress');
+        if (saved) {
+            try {
+                return JSON.parse(saved);
+            } catch (e) {
+                return null;
+            }
+        }
+        return null;
+    }
+</script> {% endcomment %}
+
+    
+
+    <a href="{% url 'practice' %}" class="nav-link">Перейти к тренировке (практика)</a>
 
     <script>
         let cardIds = [];
@@ -78,7 +298,8 @@
         let currentCard = null;
         let flipTimer = null;
         let currentInterval = 3;
-        let cycleCompleted = false;  // новый флаг
+        let cycleCompleted = false;
+        let soundEnabled = true; // по умолчанию звук включён
 
         const flashcard = document.getElementById('flashcard');
         const wordEl = document.getElementById('word');
@@ -91,9 +312,16 @@
         const shuffleBtn = document.getElementById('shuffleBtn');
         const progressBar = document.getElementById('progressBar');
         const progressText = document.getElementById('progressText');
+        const speakerBtn = document.getElementById('speakerBtn');
 
-        // Загружаем сохранённый прогресс из localStorage
-        function loadProgress() {
+        // Загружаем сохранённые настройки и прогресс
+        function loadSettings() {
+            const savedSound = localStorage.getItem('soundEnabled');
+            if (savedSound !== null) {
+                soundEnabled = savedSound === 'true';
+            }
+            speakerBtn.textContent = soundEnabled ? '🔊' : '🔇';
+            
             const saved = localStorage.getItem('learnProgress');
             if (saved) {
                 try {
@@ -105,7 +333,7 @@
             return null;
         }
 
-        // Сохраняем прогресс
+        // Сохраняем прогресс и настройки
         function saveProgress() {
             const progress = {
                 cardIds: cardIds,
@@ -113,6 +341,23 @@
                 cycleCompleted: cycleCompleted
             };
             localStorage.setItem('learnProgress', JSON.stringify(progress));
+            localStorage.setItem('soundEnabled', soundEnabled);
+        }
+
+        // Функция озвучивания текста
+        function speak(text) {
+            if (!soundEnabled) return;
+            if (!window.speechSynthesis) {
+                console.warn("Speech synthesis not supported");
+                return;
+            }
+            // Прерываем предыдущее произношение
+            window.speechSynthesis.cancel();
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'es-ES'; // испанский (испанский из Испании)
+            utterance.rate = 0.9; // немного медленнее для лучшего восприятия
+            window.speechSynthesis.speak(utterance);
         }
 
         // Сравнение массивов
@@ -134,26 +379,9 @@
             }
             let completedCount;
             if (cycleCompleted) {
-                completedCount = total; // все пройдены
+                completedCount = total;
             } else {
-                completedCount = currentIndex; // количество уже просмотренных (не включая текущую?)
-                // Примечание: currentIndex указывает на текущую показываемую карточку.
-                // Если мы хотим показывать "просмотрено N из M", где N - количество уже показанных,
-                // то при currentIndex = 0 (первая ещё не показана) правильно показывать 0 из M.
-                // Но в нашей логике после загрузки карточки мы её считаем показанной? 
-                // Обычно прогресс считают после того, как карточка была показана. 
-                // Мы будем считать, что currentIndex - это индекс текущей карточки (0..total-1),
-                // а количество просмотренных = currentIndex (если currentIndex = 0, ещё ни одной не показано).
-                // Однако при загрузке первой карточки мы хотим показывать "Просмотрено 1 из M"? 
-                // Это зависит от предпочтений. Я предлагаю считать, что когда карточка загружена, она уже считается просмотренной.
-                // Тогда количество просмотренных = currentIndex + 1 (если не завершено).
-                if (!cycleCompleted && currentIndex < total) {
-                    completedCount = currentIndex + 1;
-                } else if (!cycleCompleted && currentIndex >= total) {
-                    completedCount = total; // на всякий случай
-                } else {
-                    completedCount = total;
-                }
+                completedCount = currentIndex + 1; // текущая карточка считается просмотренной
             }
             const percent = (completedCount / total) * 100;
             progressBar.style.width = percent + '%';
@@ -168,7 +396,6 @@
             }
             flashcard.classList.remove('flipped');
 
-            // Проверяем, завершён ли цикл
             if (cycleCompleted) {
                 wordEl.textContent = 'Все карточки изучены!';
                 translationDisplay.innerHTML = '';
@@ -183,11 +410,10 @@
                 return;
             }
 
-            // Если дошли до конца, устанавливаем cycleCompleted = true
             if (currentIndex >= cardIds.length) {
                 cycleCompleted = true;
                 saveProgress();
-                loadNextCard(); // рекурсивный вызов для отображения сообщения
+                loadNextCard();
                 return;
             }
 
@@ -225,7 +451,9 @@
                     }
                     translationDisplay.innerHTML = translationsHtml;
 
-                    // Запускаем таймер переворота
+                    // Озвучиваем оригинальное слово
+                    speak(data.word);
+
                     flipTimer = setTimeout(function() {
                         flashcard.classList.add('flipped');
                     }, currentInterval * 1000);
@@ -252,14 +480,12 @@
                         return;
                     }
                     cardIds = data.card_ids;
-                    // Восстанавливаем прогресс
-                    const saved = loadProgress();
+                    const saved = loadSettings(); // загружаем настройки и прогресс
                     if (saved && saved.cardIds && saved.currentIndex !== undefined && saved.cycleCompleted !== undefined) {
                         if (arraysEqual(saved.cardIds, cardIds)) {
                             currentIndex = saved.currentIndex;
                             cycleCompleted = saved.cycleCompleted;
                         } else {
-                            // карточки изменились – начинаем заново
                             currentIndex = 0;
                             cycleCompleted = false;
                         }
@@ -290,23 +516,27 @@
             }
         });
 
+        // Кнопка динамика
+        speakerBtn.addEventListener('click', function() {
+            soundEnabled = !soundEnabled;
+            speakerBtn.textContent = soundEnabled ? '🔊' : '🔇';
+            localStorage.setItem('soundEnabled', soundEnabled);
+        });
+
         // Следующее слово
         nextBtn.addEventListener('click', function() {
             if (cycleCompleted) {
-                // Если цикл завершён, следующее слово не загружаем, предлагаем перемешать
                 alert('Цикл завершён. Нажмите "Перемешать заново", чтобы начать новый круг.');
                 return;
             }
             if (cardIds.length === 0) return;
-            // Переход к следующему индексу
             if (currentIndex < cardIds.length - 1) {
                 currentIndex++;
             } else {
-                // Достигнут конец
-                currentIndex = cardIds.length; // специальное значение для обозначения конца
+                currentIndex = cardIds.length;
                 cycleCompleted = true;
                 saveProgress();
-                loadNextCard(); // показать сообщение о завершении
+                loadNextCard();
                 return;
             }
             loadNextCard();
@@ -314,7 +544,6 @@
 
         // Перемешать заново
         shuffleBtn.addEventListener('click', function() {
-            // Запрашиваем новый список
             $.ajax({
                 url: '{% url "get_group1_cards" %}',
                 method: 'GET',
