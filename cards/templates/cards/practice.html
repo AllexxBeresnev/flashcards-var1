@@ -1,31 +1,22 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Изучение слов</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; text-align: center; }
-        .card { border: 1px solid #ccc; border-radius: 10px; padding: 20px; margin-bottom: 20px; background-color: #f9f9f9; }
-        .word { font-size: 48px; margin: 20px 0; }
-        .image { max-width: 100%; max-height: 200px; margin: 20px 0; }
-        .options { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
-        .option-btn { padding: 10px 20px; font-size: 18px; border: none; border-radius: 5px; background-color: #007bff; color: white; cursor: pointer; }
-        .option-btn:hover { background-color: #0056b3; }
-        .option-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        #result { margin-top: 20px; font-size: 18px; }
-        .next-btn { margin-top: 20px; padding: 10px 30px; font-size: 18px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; display: none; }
-    </style>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-</head>
-<body>
-    <h1>Изучение иностранных слов</h1>
+{% extends "cards/base.html" %}
+
+{% block title %}Практика - Изучение слов{% endblock %}
+
+{% block content %}
+<!-- Центрируем всё содержимое -->
+<div style="text-align: center;">
+    <h1>Практика (все группы с вероятностями)</h1>
+
     {% if no_cards %}
         <p>Нет карточек. Добавьте их в админке.</p>
+        <a href="{% url 'admin:cards_card_add' %}" target="_blank" class="next-btn">Добавить карточку</a>
     {% else %}
-        <div class="card">
-            <div class="word">{{ card.word }}</div>
+        <div class="card" onclick="flipCard()">
+            <div class="word" id="word">{{ card.word }}</div>
             {% if card.image %}
-                <img src="{{ card.image.url }}" class="image">
+                <img src="{{ card.image.url }}" class="image" id="image">
             {% endif %}
+            <div class="translation" id="translation" style="display: none;">{{ card.translation1 }}</div>
         </div>
 
         <div class="options">
@@ -37,42 +28,147 @@
         <div id="result"></div>
         <button class="next-btn" onclick="nextCard()">Следующая карточка</button>
     {% endif %}
+</div>
+{% endblock %}
 
-    <br><br><br>
-    <!-- Добавить где-нибудь вверху после <h1> -->
-    <a href="{% url 'learn' %}" style="display: inline-block; margin-bottom: 20px; padding: 10px 20px; background-color: #17a2b8; color: white; text-decoration: none; border-radius: 5px;">Перейти к заучиванию (группа 1)</a>
+{% block extra_css %}
+<style>
+    /* Стили карточки и кнопок (унифицированы с learn) */
+    .card {
+        width: 400px;
+        height: 300px;
+        border: 2px solid #ccc;
+        border-radius: 10px;
+        margin: 20px auto;
+        padding: 20px;
+        text-align: center;
+        cursor: pointer;
+        background-color: #f9f9f9;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        box-sizing: border-box;
+        position: relative;
+        transition: transform 0.3s;
+    }
+    .card:hover {
+        box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+    }
+    .word {
+        font-size: 48px;
+        font-weight: bold;
+        margin-bottom: 10px;
+    }
+    .translation {
+        font-size: 36px;
+        color: #28a745;
+        margin-top: 10px;
+    }
+    .image {
+        max-width: 100%;
+        max-height: 200px;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        border-radius: 5px;
+        margin-top: 10px;
+    }
+    .options {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px;
+        margin: 20px 0;
+    }
+    .option-btn {
+        padding: 10px 20px;
+        font-size: 18px;
+        border: none;
+        border-radius: 5px;
+        background-color: #007bff;
+        color: white;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .option-btn:hover {
+        background-color: #0056b3;
+    }
+    .option-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    #result {
+        margin-top: 20px;
+        font-size: 18px;
+        min-height: 30px;
+    }
+    .next-btn {
+        margin: 20px auto;
+        display: block;
+        padding: 10px 30px;
+        font-size: 18px;
+        background-color: #28a745;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .next-btn:hover {
+        background-color: #218838;
+    }
+</style>
+{% endblock %}
 
-    <script>
-        $(document).ready(function() {
-            $('.option-btn').click(function() {
-                var selected = $(this).data('value');
-                var cardId = {{ card.id }};
+{% block extra_js %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+    function flipCard() {
+        const word = document.getElementById('word');
+        const translation = document.getElementById('translation');
+        const image = document.getElementById('image');
+        if (word.style.display !== 'none') {
+            word.style.display = 'none';
+            translation.style.display = 'block';
+            if (image) image.style.display = 'none';
+        } else {
+            word.style.display = 'block';
+            translation.style.display = 'none';
+            if (image) image.style.display = 'block';
+        }
+    }
 
-                $('.option-btn').prop('disabled', true);
+    $(document).ready(function() {
+        $('.option-btn').click(function() {
+            var selected = $(this).data('value');
+            var cardId = {{ card.id }};
 
-                $.ajax({
-                    url: '{% url "check_answer" %}',
-                    method: 'POST',
-                    data: {
-                        card_id: cardId,
-                        selected: selected,
-                        csrfmiddlewaretoken: '{{ csrf_token }}'
-                    },
-                    success: function(response) {
-                        $('#result').html(response.message);
-                        $('#result').css('color', response.correct ? 'green' : 'red');
-                        $('.next-btn').show();
-                    },
-                    error: function() {
-                        $('#result').html('Ошибка при проверке ответа');
-                    }
-                });
+            $('.option-btn').prop('disabled', true);
+
+            $.ajax({
+                url: '{% url "check_answer" %}',
+                method: 'POST',
+                data: {
+                    card_id: cardId,
+                    selected: selected,
+                    csrfmiddlewaretoken: '{{ csrf_token }}'
+                },
+                success: function(response) {
+                    $('#result').html(response.message);
+                    $('#result').css('color', response.correct ? 'green' : 'red');
+                    $('.next-btn').show();
+                },
+                error: function() {
+                    $('#result').html('Ошибка при проверке ответа');
+                }
             });
         });
+    });
 
-        function nextCard() {
-            window.location.reload();
-        }
-    </script>
-</body>
-</html>
+    function nextCard() {
+        window.location.reload();
+    }
+</script>
+{% endblock %}
