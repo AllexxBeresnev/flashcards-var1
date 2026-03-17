@@ -9,7 +9,11 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-CSRF_COOKIE_NAME = 'csrftoken_cards'
+
+CSRF_COOKIE_NAME = 'csrftoken_tasks'
+CSRF_COOKIE_PATH = '/cards/'
+SESSION_COOKIE_NAME = 'sessionid_cards'
+SESSION_COOKIE_PATH = '/cards/'
 
 INSTALLED_APPS = [
     'django.contrib.admin',
