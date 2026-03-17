@@ -1,11 +1,11 @@
 {% extends "cards/base.html" %}
 
-{% block title %}Заучивание слов - группа 1{% endblock %}
+{% block title %}Заучивание слов{% if selected_category %} ({{ selected_category.name }}){% endif %}{% endblock %}
 
 {% block content %}
 <!-- Центрируем всё содержимое -->
 <div style="text-align: center;">
-    <h1>Заучивание слов (группа 1)</h1>
+    <h1>Заучивание слов{% if selected_category %} ({{ selected_category.name }}){% else %} (группа 1){% endif %}</h1>
 
     <div class="interval-control">
         <button class="interval-btn" id="decrementInterval">-</button>
@@ -26,7 +26,6 @@
             <div class="front">
                 <div class="word" id="word">Загрузка...</div>
                 <img id="image" class="image" style="display: none;">
-                <button class="speaker-btn" id="speakerBtn">🔊</button>
             </div>
             <div class="back">
                 <div id="translationDisplay"></div>
@@ -39,14 +38,14 @@
         <button class="shuffle-btn" id="shuffleBtn">Перемешать заново</button>
     </div>
 
-    <!-- Блок выбора голоса внизу -->
-    <div class="voice-selector-container">
-        <label for="voiceSelect">Голос озвучки:</label>
-        <select id="voiceSelect">
-            <option value="">Загрузка голосов...</option>
-        </select>
-        <div id="voiceStatus" class="voice-status"></div>
-    </div>
+    {# <!-- Блок выбора голоса внизу --> #}
+    {# <div class="voice-selector-container"> #}
+    {#     <label for="voiceSelect">Голос озвучки:</label> #}
+    {#     <select id="voiceSelect"> #}
+    {#         <option value="">Загрузка голосов...</option> #}
+    {#     </select> #}
+    {#     <div id="voiceStatus" class="voice-status"></div> #}
+    {# </div> #}
 </div>
 {% endblock %}
 
@@ -163,27 +162,6 @@
         border-radius: 5px;
         object-fit: contain;
     }
-    .speaker-btn {
-        position: absolute;
-        bottom: 10px;
-        right: 10px;
-        background: rgba(255,255,255,0.3);
-        border: none;
-        border-radius: 50%;
-        width: 40px;
-        height: 40px;
-        font-size: 24px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 10;
-        color: white;
-        transition: background 0.2s;
-    }
-    .speaker-btn:hover {
-        background: rgba(255,255,255,0.5);
-    }
 
     .next-btn {
         margin: 10px;
@@ -214,9 +192,9 @@
         background-color: #218838;
     }
 
-    .voice-selector-container {
+    {# .voice-selector-container {
         max-width: 400px;
-        margin: 30px auto 0;  /* сверху отступ, снизу 0, центрирование */
+        margin: 30px auto 0;
         text-align: left;
         background: white;
         padding: 15px;
@@ -240,7 +218,7 @@
         font-size: 12px;
         color: #666;
         margin-top: 5px;
-    }
+    } #}
 
     .message {
         font-size: 18px;
@@ -261,10 +239,16 @@
     let flipBackTimer = null;
     let currentInterval = 3;
     let cycleCompleted = false;
-    let soundEnabled = true;
-    let availableVoices = [];
-    let selectedVoiceURI = null;
-    let lastSpokenWord = '';
+    {# let availableVoices = []; #}
+    {# let selectedVoiceURI = null; #}
+    {# let lastSpokenWord = ''; #}
+    {# let soundEnabled = true; #}
+
+    // Получаем category_id из URL (обновляется при каждой загрузке)
+    function getCategoryId() {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('category');
+    }
 
     // DOM элементы
     const flashcard = document.getElementById('flashcard');
@@ -278,107 +262,102 @@
     const shuffleBtn = document.getElementById('shuffleBtn');
     const progressBar = document.getElementById('progressBar');
     const progressText = document.getElementById('progressText');
-    const speakerBtn = document.getElementById('speakerBtn');
-    const voiceSelect = document.getElementById('voiceSelect');
-    const voiceStatus = document.getElementById('voiceStatus');
+    {# const speakerBtn = document.getElementById('speakerBtn'); #}
+    {# const voiceSelect = document.getElementById('voiceSelect'); #}
+    {# const voiceStatus = document.getElementById('voiceStatus'); #}
 
-    // ---------- Функции для работы с голосами ----------
-    function loadVoices() {
-        return new Promise((resolve) => {
-            let voices = window.speechSynthesis.getVoices();
-            if (voices.length > 0) {
-                resolve(voices);
-            } else {
-                window.speechSynthesis.onvoiceschanged = () => {
-                    resolve(window.speechSynthesis.getVoices());
-                };
-            }
-        });
-    }
+    {# // ---------- Функции для работы с голосами ---------- #}
+    {# function loadVoices() { #}
+    {#     return new Promise((resolve) => { #}
+    {#         let voices = window.speechSynthesis.getVoices(); #}
+    {#         if (voices.length > 0) { #}
+    {#             resolve(voices); #}
+    {#         } else { #}
+    {#             window.speechSynthesis.onvoiceschanged = () => { #}
+    {#                 resolve(window.speechSynthesis.getVoices()); #}
+    {#             }; #}
+    {#         } #}
+    {#     }); #}
+    {# } #}
 
-    function getSpanishVoices(voices) {
-        return voices
-            .filter(voice => voice.lang.startsWith('es'))
-            .sort((a, b) => {
-                if (a.default && !b.default) return -1;
-                if (!a.default && b.default) return 1;
-                const aQuality = a.name.includes('Premium') || a.name.includes('Natural') || a.name.includes('Enhanced');
-                const bQuality = b.name.includes('Premium') || b.name.includes('Natural') || b.name.includes('Enhanced');
-                if (aQuality && !bQuality) return -1;
-                if (!aQuality && bQuality) return 1;
-                return a.name.localeCompare(b.name);
-            });
-    }
+    {# function getSpanishVoices(voices) { #}
+    {#     return voices #}
+    {#         .filter(voice => voice.lang.startsWith('es')) #}
+    {#         .sort((a, b) => { #}
+    {#             if (a.default && !b.default) return -1; #}
+    {#             if (!a.default && b.default) return 1; #}
+    {#             const aQuality = a.name.includes('Premium') || a.name.includes('Natural') || a.name.includes('Enhanced'); #}
+    {#             const bQuality = b.name.includes('Premium') || b.name.includes('Natural') || b.name.includes('Enhanced'); #}
+    {#             if (aQuality && !bQuality) return -1; #}
+    {#             if (!aQuality && bQuality) return 1; #}
+    {#             return a.name.localeCompare(b.name); #}
+    {#         }); #}
+    {# } #}
 
-    async function populateVoiceSelector() {
-        const allVoices = await loadVoices();
-        const spanishVoices = getSpanishVoices(allVoices);
-        if (spanishVoices.length === 0) {
-            voiceSelect.innerHTML = '<option value="">Испанские голоса не найдены</option>';
-            voiceStatus.textContent = '⚠️ Используется голос по умолчанию';
-            return;
-        }
-        let options = '';
-        const savedVoiceURI = localStorage.getItem('selectedVoiceURI');
-        spanishVoices.forEach(voice => {
-            const isDefault = voice.default ? ' (по умолчанию)' : '';
-            const quality = (voice.name.includes('Premium') || voice.name.includes('Natural')) ? '⭐ ' : '';
-            const selected = (savedVoiceURI === voice.voiceURI) ? 'selected' : '';
-            options += `<option value="${voice.voiceURI}" ${selected}>${quality}${voice.name} — ${voice.lang}${isDefault}</option>`;
-        });
-        voiceSelect.innerHTML = options;
-        availableVoices = spanishVoices;
-        if (!savedVoiceURI || !spanishVoices.some(v => v.voiceURI === savedVoiceURI)) {
-            const defaultVoice = spanishVoices.find(v => v.default) || spanishVoices[0];
-            if (defaultVoice) {
-                voiceSelect.value = defaultVoice.voiceURI;
-                selectedVoiceURI = defaultVoice.voiceURI;
-                localStorage.setItem('selectedVoiceURI', defaultVoice.voiceURI);
-            }
-        } else {
-            selectedVoiceURI = savedVoiceURI;
-        }
-        voiceStatus.textContent = `✅ Доступно испанских голосов: ${spanishVoices.length}`;
-    }
+    {# async function populateVoiceSelector() { #}
+    {#     const allVoices = await loadVoices(); #}
+    {#     const spanishVoices = getSpanishVoices(allVoices); #}
+    {#     if (spanishVoices.length === 0) { #}
+    {#         voiceSelect.innerHTML = '<option value="">Испанские голоса не найдены</option>'; #}
+    {#         voiceStatus.textContent = '⚠️ Используется голос по умолчанию'; #}
+    {#         return; #}
+    {#     } #}
+    {#     let options = ''; #}
+    {#     const savedVoiceURI = localStorage.getItem('selectedVoiceURI'); #}
+    {#     spanishVoices.forEach(voice => { #}
+    {#         const isDefault = voice.default ? ' (по умолчанию)' : ''; #}
+    {#         const quality = (voice.name.includes('Premium') || voice.name.includes('Natural')) ? '⭐ ' : ''; #}
+    {#         const selected = (savedVoiceURI === voice.voiceURI) ? 'selected' : ''; #}
+    {#         options += `<option value="${voice.voiceURI}" ${selected}>${quality}${voice.name} — ${voice.lang}${isDefault}</option>`; #}
+    {#     }); #}
+    {#     voiceSelect.innerHTML = options; #}
+    {#     availableVoices = spanishVoices; #}
+    {#     if (!savedVoiceURI || !spanishVoices.some(v => v.voiceURI === savedVoiceURI)) { #}
+    {#         const defaultVoice = spanishVoices.find(v => v.default) || spanishVoices[0]; #}
+    {#         if (defaultVoice) { #}
+    {#             voiceSelect.value = defaultVoice.voiceURI; #}
+    {#             selectedVoiceURI = defaultVoice.voiceURI; #}
+    {#             localStorage.setItem('selectedVoiceURI', defaultVoice.voiceURI); #}
+    {#         } #}
+    {#     } else { #}
+    {#         selectedVoiceURI = savedVoiceURI; #}
+    {#     } #}
+    {#     voiceStatus.textContent = `✅ Доступно испанских голосов: ${spanishVoices.length}`; #}
+    {# } #}
 
-    function speak(text) {
-        if (!soundEnabled) return;
-        if (!window.speechSynthesis) {
-            console.warn('Speech synthesis not supported');
-            return;
-        }
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'es-ES';
-        if (selectedVoiceURI && availableVoices.length > 0) {
-            const selectedVoice = availableVoices.find(v => v.voiceURI === selectedVoiceURI);
-            if (selectedVoice) {
-                utterance.voice = selectedVoice;
-                utterance.lang = selectedVoice.lang;
-            }
-        }
-        utterance.rate = 0.9;
-        lastSpokenWord = text;
-        window.speechSynthesis.speak(utterance);
-    }
+    {# function speak(text) { #}
+    {#     if (!soundEnabled) return; #}
+    {#     if (!window.speechSynthesis) { #}
+    {#         console.warn('Speech synthesis not supported'); #}
+    {#         return; #}
+    {#     } #}
+    {#     window.speechSynthesis.cancel(); #}
+    {#     const utterance = new SpeechSynthesisUtterance(text); #}
+    {#     utterance.lang = 'es-ES'; #}
+    {#     if (selectedVoiceURI && availableVoices.length > 0) { #}
+    {#         const selectedVoice = availableVoices.find(v => v.voiceURI === selectedVoiceURI); #}
+    {#         if (selectedVoice) { #}
+    {#             utterance.voice = selectedVoice; #}
+    {#             utterance.lang = selectedVoice.lang; #}
+    {#         } #}
+    {#     } #}
+    {#     utterance.rate = 0.9; #}
+    {#     lastSpokenWord = text; #}
+    {#     window.speechSynthesis.speak(utterance); #}
+    {# } #}
 
     // ---------- Загрузка/сохранение прогресса ----------
     function loadSettings() {
-        const savedSound = localStorage.getItem('soundEnabled');
-        if (savedSound !== null) {
-            soundEnabled = savedSound === 'true';
-        }
-        speakerBtn.textContent = soundEnabled ? '🔊' : '🔇';
-
-        const savedVoice = localStorage.getItem('selectedVoiceURI');
-        if (savedVoice) {
-            selectedVoiceURI = savedVoice;
-        }
-
         const saved = localStorage.getItem('learnProgress');
         if (saved) {
             try {
-                return JSON.parse(saved);
+                const parsed = JSON.parse(saved);
+                // Проверяем, что прогресс для текущей категории
+                const savedCategory = localStorage.getItem('learnProgressCategory');
+                const currentCategory = getCategoryId();
+                if (savedCategory === currentCategory) {
+                    return parsed;
+                }
             } catch (e) {
                 return null;
             }
@@ -393,7 +372,7 @@
             cycleCompleted: cycleCompleted
         };
         localStorage.setItem('learnProgress', JSON.stringify(progress));
-        localStorage.setItem('soundEnabled', soundEnabled);
+        localStorage.setItem('learnProgressCategory', getCategoryId());
     }
 
     function arraysEqual(a, b) {
@@ -478,7 +457,10 @@
         $.ajax({
             url: '{% url "next_learn_card" %}',
             method: 'GET',
-            data: { card_id: cardId },
+            data: { 
+                card_id: cardId,
+                category: getCategoryId()
+            },
             success: function(data) {
                 if (data.error) {
                     wordEl.textContent = data.error;
@@ -495,19 +477,9 @@
                     imageEl.style.display = 'none';
                 }
 
-                let translationsHtml = '';
-                if (data.translation2 || data.translation3) {
-                    translationsHtml = '<ul class="translations-list">';
-                    translationsHtml += '<li>' + data.translation1 + '</li>';
-                    if (data.translation2) translationsHtml += '<li>' + data.translation2 + '</li>';
-                    if (data.translation3) translationsHtml += '<li>' + data.translation3 + '</li>';
-                    translationsHtml += '</ul>';
-                } else {
-                    translationsHtml = '<div class="translation">' + data.translation1 + '</div>';
-                }
-                translationDisplay.innerHTML = translationsHtml;
+                translationDisplay.innerHTML = '<div class="translation">' + data.translation + '</div>';
 
-                speak(data.word);
+                {# speak(data.word); #}
 
                 // Запускаем цикл переворота
                 startFlipCycle();
@@ -525,10 +497,13 @@
         $.ajax({
             url: '{% url "get_group1_cards" %}',
             method: 'GET',
+            data: { category: getCategoryId() },
             success: function(data) {
                 if (data.error) {
                     cardIds = [];
                     wordEl.textContent = data.error;
+                    translationDisplay.innerHTML = '';
+                    imageEl.style.display = 'none';
                     updateProgressBar();
                     return;
                 }
@@ -569,21 +544,21 @@
         }
     });
 
-    speakerBtn.addEventListener('click', function() {
-        soundEnabled = !soundEnabled;
-        speakerBtn.textContent = soundEnabled ? '🔊' : '🔇';
-        localStorage.setItem('soundEnabled', soundEnabled);
-    });
+    {# speakerBtn.addEventListener('click', function() { #}
+    {#     soundEnabled = !soundEnabled; #}
+    {#     speakerBtn.textContent = soundEnabled ? '🔊' : '🔇'; #}
+    {#     localStorage.setItem('soundEnabled', soundEnabled); #}
+    {# }); #}
 
-    voiceSelect.addEventListener('change', function(e) {
-        selectedVoiceURI = e.target.value;
-        if (selectedVoiceURI) {
-            localStorage.setItem('selectedVoiceURI', selectedVoiceURI);
-            if (currentCard) {
-                speak(currentCard.word);
-            }
-        }
-    });
+    {# voiceSelect.addEventListener('change', function(e) { #}
+    {#     selectedVoiceURI = e.target.value; #}
+    {#     if (selectedVoiceURI) { #}
+    {#         localStorage.setItem('selectedVoiceURI', selectedVoiceURI); #}
+    {#         if (currentCard) { #}
+    {#             speak(currentCard.word); #}
+    {#         } #}
+    {#     } #}
+    {# }); #}
 
     // Ручной переворот по клику
     flashcard.addEventListener('click', function() {
@@ -632,6 +607,7 @@
         $.ajax({
             url: '{% url "get_group1_cards" %}',
             method: 'GET',
+            data: { category: getCategoryId() },
             success: function(data) {
                 if (data.error) {
                     alert(data.error);
@@ -651,7 +627,17 @@
 
     // Инициализация
     $(document).ready(function() {
-        populateVoiceSelector();
+        console.log('Document ready, fetching cards...');
+        console.log('Category ID:', getCategoryId());
+        
+        // Сбрасываем прогресс если категория не совпадает
+        const savedCategory = localStorage.getItem('learnProgressCategory');
+        const currentCategory = getCategoryId();
+        if (savedCategory !== currentCategory) {
+            localStorage.removeItem('learnProgress');
+            localStorage.setItem('learnProgressCategory', currentCategory || '');
+        }
+        
         fetchCardIds();
     });
 </script>

@@ -1,11 +1,11 @@
 {% extends "cards/base.html" %}
 
-{% block title %}Практика - Изучение слов{% endblock %}
+{% block title %}Практика{% if selected_category %} ({{ selected_category.name }}){% endif %}{% endblock %}
 
 {% block content %}
 <!-- Центрируем всё содержимое -->
 <div style="text-align: center;">
-    <h1>Практика (все группы с вероятностями)</h1>
+    <h1>Практика{% if selected_category %} ({{ selected_category.name }}){% else %} (все группы с вероятностями){% endif %}</h1>
 
     {% if no_cards %}
         <p>Нет карточек. Добавьте их в админке.</p>
@@ -16,7 +16,7 @@
             {% if card.image %}
                 <img src="{{ card.image.url }}" class="image" id="image">
             {% endif %}
-            <div class="translation" id="translation" style="display: none;">{{ card.translation1 }}</div>
+            <div class="translation" id="translation" style="display: none;">{{ card.translation }}</div>
         </div>
 
         <div class="options">
@@ -29,6 +29,20 @@
         <button class="next-btn" onclick="nextCard()">Следующая карточка</button>
     {% endif %}
 </div>
+
+<script>
+    // Получаем текущую категорию из URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const categoryId = urlParams.get('category');
+    
+    function nextCard() {
+        if (categoryId) {
+            window.location.href = '?category=' + categoryId;
+        } else {
+            window.location.reload();
+        }
+    }
+</script>
 {% endblock %}
 
 {% block extra_css %}
@@ -166,9 +180,5 @@
             });
         });
     });
-
-    function nextCard() {
-        window.location.reload();
-    }
 </script>
 {% endblock %}

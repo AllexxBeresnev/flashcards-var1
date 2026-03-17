@@ -1,0 +1,125 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    .import-form {
+        max-width: 600px;
+        margin: 20px auto;
+        padding: 30px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .import-form h2 {
+        margin-top: 0;
+        color: #333;
+    }
+    .import-form .form-row {
+        margin-bottom: 20px;
+    }
+    .import-form label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: bold;
+        color: #333;
+    }
+    .import-form input[type="file"] {
+        width: 100%;
+        padding: 10px;
+        border: 2px dashed #ddd;
+        border-radius: 4px;
+        background: #fafafa;
+    }
+    .import-form .help-text {
+        margin-top: 10px;
+        padding: 15px;
+        background: #f0f7ff;
+        border-left: 4px solid #007bff;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+    .import-form .help-text h4 {
+        margin: 0 0 10px 0;
+        color: #007bff;
+    }
+    .import-form .help-text ul {
+        margin: 5px 0;
+        padding-left: 20px;
+    }
+    .import-form .submit-row {
+        margin-top: 20px;
+    }
+    .import-form input[type="submit"] {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: bold;
+    }
+    .import-form input[type="submit"]:hover {
+        background: #0056b3;
+    }
+    .import-form .cancel-link {
+        display: inline-block;
+        margin-left: 10px;
+        color: #666;
+        text-decoration: none;
+    }
+    .import-form .cancel-link:hover {
+        color: #333;
+    }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='cards' %}">Cards</a>
+    &rsaquo; <a href="{% url 'admin:cards_category_changelist' %}">{% trans 'Тематики' %}</a>
+    &rsaquo; <a href="{% url 'admin:cards_category_change' category.id %}">{{ category.name }}</a>
+    &rsaquo; Импорт
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="import-form">
+    <h2>📥 Импорт слов в тематику "{{ category.name }}"</h2>
+    
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        
+        <div class="form-row">
+            <label for="id_file">Выберите файл для импорта:</label>
+            <input type="file" name="file" id="id_file" accept=".csv,.xlsx,.xls" required>
+        </div>
+        
+        <div class="help-text">
+            <h4>Требования к файлу:</h4>
+            <ul>
+                <li><strong>Формат:</strong> XLSX, XLS или CSV</li>
+                <li><strong>Кодировка для CSV:</strong> UTF-8</li>
+                <li><strong>Структура файла (колонки):</strong>
+                    <ul>
+                        <li><code>word</code> — слово на языке оригинала (обязательно)</li>
+                        <li><code>translation1</code> — первый перевод</li>
+                        <li><code>translation2</code> — второй перевод (необязательно)</li>
+                        <li><code>translation3</code> — третий перевод (необязательно)</li>
+                    </ul>
+                </li>
+                <li><strong>Важно:</strong> Первые строки файла должны содержать заголовки колонок</li>
+                <li><strong>Дубликаты:</strong> Все слова из файла будут добавлены в выбранную тематику</li>
+            </ul>
+        </div>
+        
+        <div class="submit-row">
+            <input type="submit" value="Импортировать">
+            <a href="{% url 'admin:cards_category_changelist' %}" class="cancel-link">Отмена</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,10 +1,36 @@
 from django.db import models
+from django.utils import timezone
+
+
+class Category(models.Model):
+    name = models.CharField("Название тематики", max_length=200, unique=True)
+    created_at = models.DateTimeField("Дата создания", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Тематика"
+        verbose_name_plural = "Тематики"
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+    def words_count(self):
+        """Подсчет количества слов в тематике (группа 1)."""
+        return self.cards.filter(group=1).count()
+    words_count.short_description = "Количество слов"
+
 
 class Card(models.Model):
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.CASCADE,
+        related_name='cards',
+        verbose_name="Тематика",
+        null=True,
+        blank=True
+    )
     word = models.CharField("Слово на языке оригинала", max_length=200)
-    translation1 = models.CharField("Перевод 1", max_length=200)
-    translation2 = models.CharField("Перевод 2", max_length=200, blank=True, null=True)
-    translation3 = models.CharField("Перевод 3", max_length=200, blank=True, null=True)
+    translation = models.CharField("Перевод", max_length=200, default='')
     image = models.ImageField("Изображение", upload_to='cards/', blank=True, null=True)
     group = models.PositiveSmallIntegerField(
         "Группа",
@@ -18,12 +44,3 @@ class Card(models.Model):
 
     def __str__(self):
         return self.word
-
-    def get_translations(self):
-        """Возвращает список непустых переводов карточки."""
-        translations = [self.translation1]
-        if self.translation2:
-            translations.append(self.translation2)
-        if self.translation3:
-            translations.append(self.translation3)
-        return translations
