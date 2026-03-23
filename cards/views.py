@@ -53,19 +53,29 @@ def practice(request):
     for card in cards:
         groups[card.group].append(card)
 
-    group_probs = {1: 0.6, 2: 0.2, 3: 0.15, 4: 0.05}
     non_empty_groups = [g for g in groups if groups[g]]
     if not non_empty_groups:
         context = {'no_cards': True}
         context.update(get_context_with_categories(request, category_id))
         return render(request, 'cards/practice.html', context)
 
-    total_prob = sum(group_probs[g] for g in non_empty_groups)
-    adjusted_probs = {g: group_probs[g] / total_prob for g in non_empty_groups}
-    chosen_group = random.choices(
-        population=non_empty_groups,
-        weights=[adjusted_probs[g] for g in non_empty_groups]
-    )[0]
+    total_cards = len(cards)
+    group1_count = len(groups[1])
+    half_total = total_cards / 2
+
+    # Если карточек группы 1 >= половины от общего числа, показываем только их
+    if group1_count >= half_total:
+        chosen_group = 1
+    else:
+        # Иначе используем вероятностный алгоритм
+        group_probs = {1: 0.6, 2: 0.2, 3: 0.15, 4: 0.05}
+        total_prob = sum(group_probs[g] for g in non_empty_groups)
+        adjusted_probs = {g: group_probs[g] / total_prob for g in non_empty_groups}
+        chosen_group = random.choices(
+            population=non_empty_groups,
+            weights=[adjusted_probs[g] for g in non_empty_groups]
+        )[0]
+
     current_card = random.choice(groups[chosen_group])
 
     correct_translation = current_card.translation
